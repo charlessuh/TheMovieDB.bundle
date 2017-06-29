@@ -2,28 +2,25 @@
 # Multi-language support added by Aqntbghd
 # 3.0 API update by ToMM
 
-import countrycode
-
 # apiary.io debugging URL
 # BASE_URL = 'http://private-ad99a-themoviedb.apiary.io/3'
 
-BASE_URL = 'https://api.tmdb.org/3' # TODO Possibly put this behind cloudflare?
-API_KEY = 'a3dc111e66105f6387e99393813ae4d5'
-TMDB_CONFIG = '%s/configuration?api_key=%s' % (BASE_URL, API_KEY)
+TMDB_BASE_URL = 'http://127.0.0.1:32400/services/tmdb?uri=%s'
+TMDB_CONFIG = '/configuration'
 
 # Movies
-TMDB_MOVIE_SEARCH = '%s/search/movie?api_key=%s&query=%%s&year=%%s&language=%%s&include_adult=%%s' % (BASE_URL, API_KEY)
-TMDB_MOVIE = '%s/movie/%%s?api_key=%s&append_to_response=releases,credits&language=%%s' % (BASE_URL, API_KEY)
-TMDB_MOVIE_IMAGES = '%s/movie/%%s/images?api_key=%s' % (BASE_URL, API_KEY)
+TMDB_MOVIE_SEARCH = '/search/movie?query=%s&year=%s&language=%s&include_adult=%s'
+TMDB_MOVIE = '/movie/%s?append_to_response=releases,credits&language=%s'
+TMDB_MOVIE_IMAGES = '/movie/%s/images'
 
 # TV
-TMDB_TV_SEARCH = '%s/search/tv?api_key=%s&query=%%s&year=%%s&language=%%s&include_adult=%%s' % (BASE_URL, API_KEY)
-TMDB_TV = '%s/tv/%%s?api_key=%s&append_to_response=credits&language=%%s' % (BASE_URL, API_KEY)
-TMDB_TV_SEASON = '%s/tv/%%s/season/%%s?api_key=%s&language=%%s' % (BASE_URL, API_KEY)
-TMDB_TV_EPISODE = '%s/tv/%%s/season/%%s/episode/%%s?api_key=%s&append_to_response=credits,images&language=%%s' % (BASE_URL, API_KEY)
-TMDB_TV_IMAGES = '%s/tv/%%s/images?api_key=%s' % (BASE_URL, API_KEY)
-TMDB_TV_EXTERNAL_IDS = '%s/tv/%%s/external_ids?api_key=%s' % (BASE_URL, API_KEY)
-TMDB_TV_TVDB = '%s/tv/find/%%s?api_key=%s&external_source=tvdb_id' % (BASE_URL, API_KEY)
+TMDB_TV_SEARCH = '/search/tv?query=%s&year=%s&language=%s&include_adult=%s'
+TMDB_TV = '/tv/%s?append_to_response=credits&language=%s'
+TMDB_TV_SEASON = '/tv/%s/season/%s?language=%s'
+TMDB_TV_EPISODE = '/tv/%s/season/%s/episode/%s?&append_to_response=credits,images&language=%s'
+TMDB_TV_IMAGES = '/tv/%s/images'
+TMDB_TV_EXTERNAL_IDS = '/tv/%s/external_ids'
+TMDB_TV_TVDB = '/tv/find/%s?external_source=tvdb_id'
 
 ARTWORK_ITEM_LIMIT = 15
 POSTER_SCORE_RATIO = .3 # How much weight to give ratings vs. vote counts when picking best posters. 0 means use only ratings.
@@ -54,9 +51,9 @@ def Start():
 @expose
 def GetImdbId(tmdb_id, lang='en'):
 
-  tmdb_dict = GetJSON(url=TMDB_MOVIE % (tmdb_id, lang))
+  tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE % (tmdb_id, lang))
 
-  if isinstance(tmdb_dict, dict) and 'imdb_id' in tmdb_dict and RE_IMDB_ID.search(tmdb_dict['imdb_id']):
+  if isinstance(tmdb_dict, dict) and 'imdb_id' in tmdb_dict and tmdb_dict['imdb_id'] and RE_IMDB_ID.search(tmdb_dict['imdb_id']):
     return tmdb_dict['imdb_id']
 
   return None
@@ -65,9 +62,9 @@ def GetImdbId(tmdb_id, lang='en'):
 @expose
 def GetTvdbId(tmdb_id):
 
-  tmdb_dict = GetJSON(url=TMDB_TV_EXTERNAL_IDS % tmdb_id)
+  tmdb_dict = GetTMDBJSON(url=TMDB_TV_EXTERNAL_IDS % tmdb_id)
 
-  if isinstance(tmdb_dict, dict) and 'tvdb_id' in tmdb_dict and tmdb_dict['tvdb_id']:
+  if isinstance(tmdb_dict, dict) and 'tvdb_id' in tmdb_dict and tmdb_dict['tvdb_id'] and tmdb_dict['tvdb_id']:
     return str(tmdb_dict['tvdb_id'])
 
   return None
@@ -76,9 +73,9 @@ def GetTvdbId(tmdb_id):
 @expose
 def GetTvRageId(tmdb_id):
 
-  tmdb_dict = GetJSON(url=TMDB_TV_EXTERNAL_IDS % tmdb_id)
+  tmdb_dict = GetTMDBJSON(url=TMDB_TV_EXTERNAL_IDS % tmdb_id)
 
-  if isinstance(tmdb_dict, dict) and 'tvrage_id' in tmdb_dict and tmdb_dict['tvrage_id']:
+  if isinstance(tmdb_dict, dict) and 'tvrage_id' in tmdb_dict and tmdb_dict['tvrage_id'] and tmdb_dict['tvrage_id']:
     return str(tmdb_dict['tvrage_id'])
 
   return None
@@ -100,14 +97,14 @@ def GetTMDbMetadata(id, lang):
   return PerformTMDbMovieUpdate(id, lang)
 
 ####################################################################################################
-def GetJSON(url, cache_time=CACHE_1MONTH):
+def GetTMDBJSON(url, cache_time=CACHE_1MONTH):
 
   tmdb_dict = None
 
   try:
-    tmdb_dict = JSON.ObjectFromURL(url, sleep=2.0, headers={'Accept': 'application/json'}, cacheTime=cache_time)
+    tmdb_dict = JSON.ObjectFromURL(TMDB_BASE_URL % String.Quote(url, True), sleep=2.0, headers={'Accept': 'application/json'}, cacheTime=cache_time)
   except:
-    Log('Error fetching JSON from The Movie Database.')
+    Log('Error fetching JSON from The Movie Database: %s' % (TMDB_BASE_URL % String.Quote(url, True)))
 
   return tmdb_dict
 
@@ -153,7 +150,8 @@ def DictToMovieMetadataObj(metadata_dict, metadata):
 
         for k, v in dict_value.iteritems():
           if isinstance(v, tuple):
-            attr_obj[k] = Proxy.Preview(HTTP.Request(v[0]).content, sort_order=v[1])
+            try: attr_obj[k] = Proxy.Preview(HTTP.Request(v[0]).content, sort_order=v[1])
+            except: pass
           else:
             attr_obj[k] = v
 
@@ -165,28 +163,51 @@ def DictToMovieMetadataObj(metadata_dict, metadata):
 
     elif attr_name is 'originally_available_at':
 
-      try:
-        attr_obj.setcontent(Datetime.ParseDate(dict_value).date())
-      except:
-        pass
+      try: attr_obj.setcontent(Datetime.ParseDate(dict_value).date())
+      except: pass
 
     else:
       attr_obj.setcontent(dict_value)
 
-  # Roles is a special kind of object
+  # The following are special kind of objects
   if 'roles' in metadata_dict:
     metadata.roles.clear()
-
     for role in metadata_dict['roles']:
       meta_role = metadata.roles.new()
       if 'role' in role:
         meta_role.role = role['role']
-
-      if 'actor' in role:
-        meta_role.actor = role['actor']
-
-      if 'profile_path' in role:
+      if 'name' in role:
+        meta_role.name = role['name']
+      if 'photo' in role:
         meta_role.photo = role['photo']
+
+  if 'directors' in metadata_dict:
+    metadata.directors.clear()
+    for director in metadata_dict['directors']:
+      meta_director = metadata.directors.new()
+      if 'name' in director:
+        meta_director.name = director['name']
+      if 'photo' in director:
+        meta_director.photo = director['photo']
+
+  if 'writers' in metadata_dict:
+    metadata.writers.clear()
+    for writer in metadata_dict['writers']:
+      meta_writer = metadata.writers.new()
+      if 'name' in writer:
+        meta_writer.name = writer['name']
+      if 'photo' in writer:
+        meta_writer.photo = writer['photo']
+
+  if 'producers' in metadata_dict:
+    metadata.producers.clear()
+    for producer in metadata_dict['producers']:
+      meta_producer = metadata.producers.new()
+      if 'name' in producer:
+        meta_producer.name = producer['name']
+      if 'photo' in producer:
+        meta_producer.photo = producer['photo']
+
 
 ####################################################################################################
 def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
@@ -199,7 +220,7 @@ def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
   else:
     # If this a manual search (Fix Incorrect Match) and we get an IMDb id as input.
     if manual and RE_IMDB_ID.search(media.name):
-      tmdb_dict = GetJSON(url=TMDB_MOVIE % (media.name, lang))
+      tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE % (media.name, lang))
 
       if isinstance(tmdb_dict, dict) and 'id' in tmdb_dict:
 
@@ -207,7 +228,7 @@ def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
           if 'imdb_id' in tmdb_dict and RE_IMDB_ID.search(tmdb_dict['imdb_id']):
             id = str(tmdb_dict['imdb_id'])
           else:
-            id = GetImdbId(tmdb_dict['id'], lang) or tmdb['id']
+            id = GetImdbId(tmdb_dict['id'], lang) or tmdb_dict['id']
         else:
           id = tmdb_dict['id']
 
@@ -235,10 +256,10 @@ def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
       # try the search again with the original.
       #
       stripped_name = String.StripDiacritics(media.name)
-      tmdb_dict = GetJSON(url=TMDB_MOVIE_SEARCH % (String.Quote(stripped_name), year, lang, include_adult))
-      if media.name != stripped_name and (tmdb_dict == None or len(tmdb_dict['results']) == 0):
+      tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE_SEARCH % (String.Quote(stripped_name, True), year, lang, include_adult))
+      if media.name != stripped_name and (tmdb_dict is None or len(tmdb_dict['results']) == 0):
         Log('No results for title modified by strip diacritics, searching again with the original: ' + media.name)
-        tmdb_dict = GetJSON(url=TMDB_MOVIE_SEARCH % (String.Quote(media.name), year, lang, include_adult))
+        tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE_SEARCH % (String.Quote(media.name, True), year, lang, include_adult))
 
       if isinstance(tmdb_dict, dict) and 'results' in tmdb_dict:
 
@@ -282,26 +303,29 @@ def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
                                lang=lang)
 
 ####################################################################################################
-def PerformTMDbMovieUpdate(metadata_id, lang):
+def PerformTMDbMovieUpdate(metadata_id, lang, existing_metadata):
 
   metadata = dict(id=metadata_id)
 
-  config_dict = GetJSON(url=TMDB_CONFIG, cache_time=CACHE_1WEEK * 2)
-  tmdb_dict = GetJSON(url=TMDB_MOVIE % (metadata_id, lang))
+  config_dict = GetTMDBJSON(url=TMDB_CONFIG, cache_time=CACHE_1WEEK * 2)
+  if config_dict is None or 'images' not in config_dict or 'base_url' not in config_dict['images']:
+    config_dict = dict(images=dict(base_url=''))
 
-  if not isinstance(tmdb_dict, dict) or 'overview' not in tmdb_dict or tmdb_dict['overview'] is None or tmdb_dict['overview'] == "":
+  tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE % (metadata_id, lang))
+
+  if not isinstance(tmdb_dict, dict) or 'overview' not in tmdb_dict or tmdb_dict['overview'] in (None, ''):
     # Retry the query with no language specified if we didn't get anything from the initial request.
-    tmdb_dict = GetJSON(url=TMDB_MOVIE % (metadata_id, ''))
+    tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE % (metadata_id, ''))
 
   # This additional request is necessary since full art/poster lists are not returned if they don't exactly match the language
-  tmdb_images_dict = GetJSON(url=TMDB_MOVIE_IMAGES % metadata_id)
+  tmdb_images_dict = GetTMDBJSON(url=TMDB_MOVIE_IMAGES % metadata_id)
 
   if not isinstance(tmdb_dict, dict) or not isinstance(tmdb_images_dict, dict):
     return None
 
   # Rating.
-  votes = tmdb_dict['vote_count']
-  rating = tmdb_dict['vote_average']
+  votes = tmdb_dict.get('vote_count') or 0
+  rating = tmdb_dict.get('vote_average') or 0.0
   if votes > 3:
     metadata['rating'] = rating
     metadata['audience_rating'] = 0.0
@@ -309,13 +333,13 @@ def PerformTMDbMovieUpdate(metadata_id, lang):
     metadata['audience_rating_image'] = None
 
   # Title of the film.
-  metadata['title'] = tmdb_dict['title']
+  metadata['title'] = tmdb_dict.get('title')
 
-  if 'original_title' in tmdb_dict and tmdb_dict['original_title'] != tmdb_dict['title']:
+  if 'original_title' in tmdb_dict and tmdb_dict['original_title'] != metadata['title']:
     metadata['original_title'] = tmdb_dict['original_title']
 
   # Tagline.
-  metadata['tagline'] = tmdb_dict['tagline']
+  metadata['tagline'] = tmdb_dict.get('tagline')
 
   # Release date.
   try:
@@ -327,25 +351,26 @@ def PerformTMDbMovieUpdate(metadata_id, lang):
   if Prefs['country'] != '':
     c = Prefs['country']
 
-    for country in tmdb_dict['releases']['countries']:
-      if country['iso_3166_1'] == countrycode.COUNTRY_TO_CODE[c]:
+    try:
+      for country in tmdb_dict['releases']['countries']:
+        if country['iso_3166_1'] == Locale.CountryCodes.MatchToCode(c):
 
-        # Content rating.
-        if 'certification' in country and country['certification'] != '':
-          if countrycode.COUNTRY_TO_CODE[c] == 'US':
-            metadata['content_rating'] = country['certification']
-          else:
-            metadata['content_rating'] = '%s/%s' % (countrycode.COUNTRY_TO_CODE[c].lower(), country['certification'])
+          # Content rating.
+          if 'certification' in country and country['certification'] != '':
+            if Locale.CountryCodes.MatchToCode(c) == 'US':
+              metadata['content_rating'] = country['certification']
+            else:
+              metadata['content_rating'] = '%s/%s' % (Locale.CountryCodes.MatchToCode(c).lower(), country['certification'])
 
-        # Release date (country specific).
-        if 'release_date' in country and country['release_date'] != '':
+          # Release date (country specific).
           try:
             metadata['originally_available_at'] = country['release_date']
             metadata['year'] = Datetime.ParseDate(country['release_date']).date().year
           except:
             pass
 
-        break
+          break
+    except: pass
 
   # Summary.
   metadata['summary'] = tmdb_dict['overview']
@@ -358,21 +383,22 @@ def PerformTMDbMovieUpdate(metadata_id, lang):
 
   # Genres.
   metadata['genres'] = []
-  for genre in tmdb_dict['genres']:
-    metadata['genres'].append(genre['name'].strip())
+  for genre in (tmdb_dict.get('genres') or list()):
+    metadata['genres'].append(genre.get('name', '').strip())
 
   # Collections.
   metadata['collections'] = []
-  if Prefs['collections'] and tmdb_dict['belongs_to_collection'] is not None:
-    metadata['collections'].append(tmdb_dict['belongs_to_collection']['name'].replace(' Collection',''))
+  if Prefs['collections'] and isinstance(tmdb_dict.get('belongs_to_collection', None), dict):
+    metadata['collections'].append((tmdb_dict['belongs_to_collection'].get('name') or '').replace(' Collection',''))
 
   # Studio.
   if 'production_companies' in tmdb_dict and len(tmdb_dict['production_companies']) > 0:
-    index = tmdb_dict['production_companies'][0]['id']
+    try: index = tmdb_dict['production_companies'][0]['id']
+    except: index = ''  # All numbers are less than an empty string
     company = None
 
     for studio in tmdb_dict['production_companies']:
-      if studio['id'] <= index:
+      if (studio.get('id') or '') <= index:  # All numbers are less than an empty string
         index = studio['id']
         company = studio['name'].strip()
 
@@ -389,29 +415,48 @@ def PerformTMDbMovieUpdate(metadata_id, lang):
       metadata['countries'].append(country)
 
   # Crew.
-  metadata['directors'] = []
-  metadata['writers'] = []
-  metadata['producers'] = []
+  metadata['directors'] = list()
+  metadata['writers'] = list()
+  metadata['producers'] = list()
 
-  for member in tmdb_dict['credits']['crew']:
-    if member['job'] == 'Director':
-      metadata['directors'].append(member['name'])
-    elif member['job'] in ('Writer', 'Screenplay', 'Author'):
-      metadata['writers'].append(member['name'])
-    elif member['job'] == 'Producer':
-      metadata['producers'].append(member['name'])
+  try:
+    for member in tmdb_dict['credits']['crew']:
+      try:
+        if member['job'] == 'Director':
+          director = dict()
+          director['name'] = member['name']
+          if member['profile_path'] is not None:
+            director['photo'] = config_dict['images']['base_url'] + 'original' + member['profile_path']
+          metadata['directors'].append(director)
+        elif member['job'] in ('Writer', 'Screenplay', 'Author'):
+          writer = dict()
+          writer['name'] = member['name']
+          if member['profile_path'] is not None:
+            writer['photo'] = config_dict['images']['base_url'] + 'original' + member['profile_path']
+          metadata['writers'].append(writer)
+        elif member['job'] == 'Producer':
+          producer = dict()
+          producer['name'] = member['name']
+          if member['profile_path'] is not None:
+            producer['photo'] = config_dict['images']['base_url'] + 'original' + member['profile_path']
+          metadata['producers'].append(producer)
+      except: pass
+  except: pass
 
   # Cast.
-  metadata['roles'] = []
+  metadata['roles'] = list()
 
-  for member in sorted(tmdb_dict['credits']['cast'], key=lambda k: k['order']):
-    role = {}
-    role['role'] = member['character']
-    role['actor'] = member['name']
-    if member['profile_path'] is not None:
-      role['photo'] = config_dict['images']['base_url'] + 'original' + member['profile_path']
-    metadata['roles'].append(role)
-
+  try:
+    for member in sorted((tmdb_dict.get('credits') or dict()).get('cast', list()), key=lambda k: k['order']):
+      try:
+        role = dict()
+        role['role'] = member['character']
+        role['name'] = member['name']
+        if member['profile_path'] is not None:
+          role['photo'] = config_dict['images']['base_url'] + 'original' + member['profile_path']
+        metadata['roles'].append(role)
+      except:pass
+  except: pass
   # Note: for TMDB artwork, number of votes is a good predictor of poster quality. Ratings are assigned
   # using a Baysean average that appears to be poorly calibrated, so ratings are almost always between
   # 5 and 6 or zero.  Consider both of these, weighting them according to the POSTER_SCORE_RATIO.
@@ -419,76 +464,87 @@ def PerformTMDbMovieUpdate(metadata_id, lang):
   # No votes get zero, use TMDB's apparent initial Baysean prior mean of 5 instead.
   valid_names = list()
 
-  metadata['posters'] = {}
+  metadata['posters'] = dict()
 
   if tmdb_images_dict['posters']:
-    max_average = max([(lambda p: p['vote_average'] or 5)(p) for p in tmdb_images_dict['posters']])
-    max_count = max([(lambda p: p['vote_count'])(p) for p in tmdb_images_dict['posters']]) or 1
+    try:
+      max_average = max([(lambda p: p['vote_average'] or 5)(p) for p in tmdb_images_dict['posters']])
+      max_count = max([(lambda p: p['vote_count'])(p) for p in tmdb_images_dict['posters']]) or 1
 
-    for i, poster in enumerate(tmdb_images_dict['posters']):
+      for i, poster in enumerate(tmdb_images_dict['posters']):
+        try:
+          score = (poster['vote_average'] / max_average) * POSTER_SCORE_RATIO
+          score += (poster['vote_count'] / max_count) * (1 - POSTER_SCORE_RATIO)
+          tmdb_images_dict['posters'][i]['score'] = score
 
-      score = (poster['vote_average'] / max_average) * POSTER_SCORE_RATIO
-      score += (poster['vote_count'] / max_count) * (1 - POSTER_SCORE_RATIO)
-      tmdb_images_dict['posters'][i]['score'] = score
+          # Boost the score for localized posters (according to the preference).
+          if Prefs['localart']:
+            if poster['iso_639_1'] == lang:
+              tmdb_images_dict['posters'][i]['score'] = poster['score'] + 1
 
-      # Boost the score for localized posters (according to the preference).
-      if Prefs['localart']:
-        if poster['iso_639_1'] == lang:
-          tmdb_images_dict['posters'][i]['score'] = poster['score'] + 1
+          # Discount score for foreign posters.
+          if poster['iso_639_1'] != lang and poster['iso_639_1'] is not None and poster['iso_639_1'] != 'en':
+            tmdb_images_dict['posters'][i]['score'] = poster['score'] - 1
+        except: pass
 
-      # Discount score for foreign posters.
-      if poster['iso_639_1'] != lang and poster['iso_639_1'] is not None and poster['iso_639_1'] != 'en':
-        tmdb_images_dict['posters'][i]['score'] = poster['score'] - 1
+      for i, poster in enumerate(sorted(tmdb_images_dict['posters'], key=lambda k: k['score'], reverse=True)):
+        try:
+          if i > ARTWORK_ITEM_LIMIT:
+            break
+          else:
+            poster_url = config_dict['images']['base_url'] + 'original' + poster['file_path']
+            thumb_url = config_dict['images']['base_url'] + 'w154' + poster['file_path']
+            valid_names.append(poster_url)
 
-    for i, poster in enumerate(sorted(tmdb_images_dict['posters'], key=lambda k: k['score'], reverse=True)):
-      if i > ARTWORK_ITEM_LIMIT:
-        break
-      else:
-        poster_url = config_dict['images']['base_url'] + 'original' + poster['file_path']
-        thumb_url = config_dict['images']['base_url'] + 'w154' + poster['file_path']
-        valid_names.append(poster_url)
-
-        if poster_url not in metadata['posters']:
-          try: metadata['posters'][poster_url] = (thumb_url, i+1)
-          except: pass
+            if poster_url not in existing_metadata.posters:
+              try: metadata['posters'][poster_url] = (thumb_url, i+1)
+              except: pass
+        except: pass
+    except: pass
 
   # Backdrops.
   valid_names = list()
   metadata['art'] = {}
   if tmdb_images_dict['backdrops']:
-    max_average = max([(lambda p: p['vote_average'] or 5)(p) for p in tmdb_images_dict['backdrops']])
-    max_count = max([(lambda p: p['vote_count'])(p) for p in tmdb_images_dict['backdrops']]) or 1
+    try:
+      max_average = max([(lambda p: p['vote_average'] or 5)(p) for p in tmdb_images_dict['backdrops']])
+      max_count = max([(lambda p: p['vote_count'])(p) for p in tmdb_images_dict['backdrops']]) or 1
 
-    for i, backdrop in enumerate(tmdb_images_dict['backdrops']):
+      for i, backdrop in enumerate(tmdb_images_dict['backdrops']):
 
-      score = (backdrop['vote_average'] / max_average) * BACKDROP_SCORE_RATIO
-      score += (backdrop['vote_count'] / max_count) * (1 - BACKDROP_SCORE_RATIO)
-      tmdb_images_dict['backdrops'][i]['score'] = score
+        try:
+          score = (backdrop['vote_average'] / max_average) * BACKDROP_SCORE_RATIO
+          score += (backdrop['vote_count'] / max_count) * (1 - BACKDROP_SCORE_RATIO)
+          tmdb_images_dict['backdrops'][i]['score'] = score
 
-      # For backdrops, we prefer "No Language" since they're intended to sit behind text.
-      if backdrop['iso_639_1'] == 'xx' or backdrop['iso_639_1'] == 'none':
-        tmdb_images_dict['backdrops'][i]['score'] = float(backdrop['score']) + 2
+          # For backdrops, we prefer "No Language" since they're intended to sit behind text.
+          if backdrop['iso_639_1'] == 'xx' or backdrop['iso_639_1'] == 'none':
+            tmdb_images_dict['backdrops'][i]['score'] = float(backdrop['score']) + 2
 
-      # Boost the score for localized art (according to the preference).
-      if Prefs['localart']:
-        if backdrop['iso_639_1'] == lang:
-          tmdb_images_dict['backdrops'][i]['score'] = float(backdrop['score']) + 1
+          # Boost the score for localized art (according to the preference).
+          if Prefs['localart']:
+            if backdrop['iso_639_1'] == lang:
+              tmdb_images_dict['backdrops'][i]['score'] = float(backdrop['score']) + 1
 
-      # Discount score for foreign art.
-      if backdrop['iso_639_1'] != lang and backdrop['iso_639_1'] is not None and backdrop['iso_639_1'] != 'en':
-        tmdb_images_dict['backdrops'][i]['score'] = float(backdrop['score']) - 1
+          # Discount score for foreign art.
+          if backdrop['iso_639_1'] != lang and backdrop['iso_639_1'] is not None and backdrop['iso_639_1'] != 'en':
+            tmdb_images_dict['backdrops'][i]['score'] = float(backdrop['score']) - 1
+        except: pass
 
-    for i, backdrop in enumerate(sorted(tmdb_images_dict['backdrops'], key=lambda k: k['score'], reverse=True)):
-      if i > ARTWORK_ITEM_LIMIT:
-        break
-      else:
-        backdrop_url = config_dict['images']['base_url'] + 'original' + backdrop['file_path']
-        thumb_url = config_dict['images']['base_url'] + 'w300' + backdrop['file_path']
-        valid_names.append(backdrop_url)
+      for i, backdrop in enumerate(sorted(tmdb_images_dict['backdrops'], key=lambda k: k['score'], reverse=True)):
+        try:
+          if i > ARTWORK_ITEM_LIMIT:
+            break
+          else:
+            backdrop_url = config_dict['images']['base_url'] + 'original' + backdrop['file_path']
+            thumb_url = config_dict['images']['base_url'] + 'w300' + backdrop['file_path']
+            valid_names.append(backdrop_url)
 
-        if backdrop_url not in metadata['art']:
-          try: metadata['art'][backdrop_url] = (thumb_url, i+1)
-          except: pass
+            if backdrop_url not in existing_metadata.art:
+              try: metadata['art'][backdrop_url] = (thumb_url, i+1)
+              except: pass
+        except: pass
+    except: pass
 
   return metadata
 
@@ -499,7 +555,6 @@ class TMDbAgent(Agent.Movies):
   languages = LANGUAGES
   primary_provider = True
   accepts_from = ['com.plexapp.agents.localmedia']
-  contributes_to = ['com.plexapp.agents.imdb']
 
   def search(self, results, media, lang, manual):
 
@@ -507,7 +562,11 @@ class TMDbAgent(Agent.Movies):
 
   def update(self, metadata, media, lang):
 
-    metadata_dict = PerformTMDbMovieUpdate(metadata.id, lang)
+    metadata_dict = PerformTMDbMovieUpdate(metadata.id, lang, metadata)
+
+    if metadata_dict is None:
+      Log('TMDb was unable to get any metadata for %s (lang = %s)' % (metadata.id, lang))
+      return
 
     DictToMovieMetadataObj(metadata_dict, metadata)
 
@@ -524,7 +583,7 @@ class TMDbAgent(Agent.TV_Shows):
 
     # If TMDB is used as a secondary agent for TVDB, find the TMDB id
     if media.primary_agent == 'com.plexapp.agents.thetvdb':
-      tmdb_dict = GetJSON(url=TMDB_TV_TVDB % (media.primary_metadata.id))
+      tmdb_dict = GetTMDBJSON(url=TMDB_TV_TVDB % (media.primary_metadata.id))
 
       if isinstance(tmdb_dict, dict) and 'tv_results' in tmdb_dict and len(tmdb_dict['tv_results']) > 0:
         tmdb_id = tmdb_dict['tv_results'][0]['id']
@@ -557,11 +616,11 @@ class TMDbAgent(Agent.TV_Shows):
     # try the search again with the original.
     #
     stripped_name = String.StripDiacritics(media_show)
-    tmdb_dict = GetJSON(url=TMDB_TV_SEARCH % (String.Quote(stripped_name), year, lang, include_adult))
+    tmdb_dict = GetTMDBJSON(url=TMDB_TV_SEARCH % (String.Quote(stripped_name, True), year, lang, include_adult))
 
     if media_show != stripped_name and (tmdb_dict == None or len(tmdb_dict['results']) == 0):
       Log('No results for title modified by strip diacritics, searching again with the original: ' + media_show)
-      tmdb_dict = GetJSON(url=TMDB_TV_SEARCH % (String.Quote(media_show), year, lang, include_adult))
+      tmdb_dict = GetTMDBJSON(url=TMDB_TV_SEARCH % (String.Quote(media_show, True), year, lang, include_adult))
 
     if isinstance(tmdb_dict, dict) and 'results' in tmdb_dict:
       for i, show in enumerate(sorted(tmdb_dict['results'], key=lambda k: k['popularity'], reverse=True)):
@@ -599,15 +658,18 @@ class TMDbAgent(Agent.TV_Shows):
 
   def update(self, metadata, media, lang):
 
-    config_dict = GetJSON(url=TMDB_CONFIG, cache_time=CACHE_1WEEK * 2)
-    tmdb_dict = GetJSON(url=TMDB_TV % (metadata.id, lang))
+    config_dict = GetTMDBJSON(url=TMDB_CONFIG, cache_time=CACHE_1WEEK * 2)
+    if config_dict is None or 'images' not in config_dict or 'base_url' not in config_dict['images']:
+      config_dict = dict(images=dict(base_url=''))
+
+    tmdb_dict = GetTMDBJSON(url=TMDB_TV % (metadata.id, lang))
 
     if not isinstance(tmdb_dict, dict) or 'overview' not in tmdb_dict or tmdb_dict['overview'] is None or tmdb_dict['overview'] == "":
       # Retry the query with no language specified if we didn't get anything from the initial request.
-      tmdb_dict = GetJSON(url=TMDB_TV % (metadata.id, ''))
+      tmdb_dict = GetTMDBJSON(url=TMDB_TV % (metadata.id, ''))
 
     # This additional request is necessary since full art/poster lists are not returned if they don't exactly match the language
-    tmdb_images_dict = GetJSON(url=TMDB_TV_IMAGES % metadata.id)
+    tmdb_images_dict = GetTMDBJSON(url=TMDB_TV_IMAGES % metadata.id)
 
     if not isinstance(tmdb_dict, dict) or not isinstance(tmdb_images_dict, dict):
       return None
@@ -661,8 +723,8 @@ class TMDbAgent(Agent.TV_Shows):
     metadata.countries.clear()
     if 'origin_country' in tmdb_dict:
       for country in tmdb_dict['origin_country']:
-        if len(country) == 2 and country in countrycode.CODE_TO_COUNTRY:
-          country = countrycode.CODE_TO_COUNTRY[country]
+        if len(country) == 2 and Locale.CountryCodes.MatchToCountry(country):
+          country = Locale.CountryCodes.MatchToCountry(country)
         else:
           continue
 
@@ -675,7 +737,7 @@ class TMDbAgent(Agent.TV_Shows):
     for member in sorted(tmdb_dict['credits']['cast'], key=lambda k: k['order']):
       role = metadata.roles.new()
       role.role = member['character']
-      role.actor = member['name']
+      role.name = member['name']
       if member['profile_path'] is not None:
         role.photo = config_dict['images']['base_url'] + 'original' + member['profile_path']
 
@@ -771,7 +833,7 @@ class TMDbAgent(Agent.TV_Shows):
         @task
         def UpdateSeason(season=season, s=s):
 
-          tmdb_season_dict = GetJSON(url=TMDB_TV_SEASON % (metadata.id, s, lang))
+          tmdb_season_dict = GetTMDBJSON(url=TMDB_TV_SEASON % (metadata.id, s, lang))
 
           if tmdb_season_dict is None:
             return None
@@ -802,7 +864,7 @@ class TMDbAgent(Agent.TV_Shows):
           @task
           def UpdateEpisode(episode=episode, s=s, e=e):
 
-            tmdb_episode_dict = GetJSON(url=TMDB_TV_EPISODE % (metadata.id, s, e, lang))
+            tmdb_episode_dict = GetTMDBJSON(url=TMDB_TV_EPISODE % (metadata.id, s, e, lang))
 
             if not isinstance(tmdb_episode_dict, dict):
               return None
@@ -834,11 +896,20 @@ class TMDbAgent(Agent.TV_Shows):
 
               for member in tmdb_episode_dict['credits']['crew']:
                 if member['job'] == 'Director':
-                  episode.directors.add(member['name'])
+                  director = episode.directors.new()
+                  director.name = member['name']
+                  if member['profile_path'] is not None:
+                    director.photo = config_dict['images']['base_url'] + 'original' + member['profile_path']
                 elif member['job'] in ('Writer', 'Screenplay'):
-                  episode.writers.add(member['name'])
+                  writer = episode.writers.new()
+                  writer.name = member['name']
+                  if member['profile_path'] is not None:
+                    writer.photo = config_dict['images']['base_url'] + 'original' + member['profile_path']
                 elif member['job'] == 'Producer':
-                  episode.producers.add(member['name'])
+                  producer = episode.producers.new()
+                  producer.name = member['name']
+                  if member['profile_path'] is not None:
+                    producer.photo = config_dict['images']['base_url'] + 'original' + member['profile_path']
 
             # TODO:
             # - Actors per episode?
