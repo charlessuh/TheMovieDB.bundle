@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.plexapp.agents.themoviedb</string>
+	<string>com.github.charlessuh.plexapp.agents.themoviedb</string>
 	<key>PlexAgentAttributionText</key>
 	<string>
 		&lt;a href=&quot;http://www.themoviedb.org&quot;&gt;The Movie Database&lt;/a&gt; is a free and open movie database. &lt;br/&gt;

@@ -551,7 +551,7 @@ def PerformTMDbMovieUpdate(metadata_id, lang, existing_metadata):
 ####################################################################################################
 class TMDbAgent(Agent.Movies):
 
-  name = 'The Movie Database'
+  name = 'My The Movie Database'
   languages = LANGUAGES
   primary_provider = True
   accepts_from = ['com.plexapp.agents.localmedia']
@@ -573,16 +573,16 @@ class TMDbAgent(Agent.Movies):
 ####################################################################################################
 class TMDbAgent(Agent.TV_Shows):
 
-  name = 'The Movie Database'
+  name = 'My The Movie Database'
   languages = LANGUAGES
   primary_provider = True
-  accepts_from = ['com.plexapp.agents.localmedia', 'com.plexapp.agents.thetvdb']
-  contributes_to = ['com.plexapp.agents.thetvdb']
+  accepts_from = ['com.plexapp.agents.localmedia', 'com.github.charlessuh.plexapp.agents.thetvdb']
+  contributes_to = ['com.github.charlessuh.plexapp.agents.thetvdb']
 
   def search(self, results, media, lang, manual):
 
     # If TMDB is used as a secondary agent for TVDB, find the TMDB id
-    if media.primary_agent == 'com.plexapp.agents.thetvdb':
+    if media.primary_agent == 'com.github.charlessuh.plexapp.agents.thetvdb':
       tmdb_dict = GetTMDBJSON(url=TMDB_TV_TVDB % (media.primary_metadata.id))
 
       if isinstance(tmdb_dict, dict) and 'tv_results' in tmdb_dict and len(tmdb_dict['tv_results']) > 0:
