@@ -262,10 +262,12 @@ def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
         tmdb_dict = GetTMDBJSON(url=TMDB_MOVIE_SEARCH % (String.Quote(media.name, True), year, lang, include_adult))
 
       if isinstance(tmdb_dict, dict) and 'results' in tmdb_dict:
+        tmdb_results = tmdb_dict['results']
+        if not Prefs['rawsearchorder']:
+          tmdb_results = sorted(tmdb_results, key=lambda k: k['popularity'], reverse=True)
 
-        for i, movie in enumerate(sorted(tmdb_dict['results'], key=lambda k: k['popularity'], reverse=True)):
+        for i, movie in enumerate(tmdb_results):
           score = 90
-          score = score - abs(String.LevenshteinDistance(movie['title'].lower(), media.name.lower()))
 
           # Adjust score slightly for 'popularity' (helpful for similar or identical titles when no media.year is present)
           score = score - (5 * i)
@@ -274,14 +276,17 @@ def PerformTMDbMovieSearch(results, media, lang, manual, get_imdb_id=False):
             release_year = int(movie['release_date'].split('-')[0])
           else:
             release_year = -1
+          
+          if not Prefs['rawsearchorder']:
+            score = score - abs(String.LevenshteinDistance(movie['title'].lower(), media.name.lower()))
 
-          if media.year and int(media.year) > 1900 and release_year:
-            year_diff = abs(int(media.year) - release_year)
+            if media.year and int(media.year) > 1900 and release_year:
+              year_diff = abs(int(media.year) - release_year)
 
-            if year_diff <= 1:
-              score = score + 10
-            else:
-              score = score - (5 * year_diff)
+              if year_diff <= 1:
+                score = score + 10
+              else:
+                score = score - (5 * year_diff)
 
           if score <= 0:
             continue
@@ -623,27 +628,34 @@ class TMDbAgent(Agent.TV_Shows):
       tmdb_dict = GetTMDBJSON(url=TMDB_TV_SEARCH % (String.Quote(media_show, True), year, lang, include_adult))
 
     if isinstance(tmdb_dict, dict) and 'results' in tmdb_dict:
-      for i, show in enumerate(sorted(tmdb_dict['results'], key=lambda k: k['popularity'], reverse=True)):
+      tmdb_results = tmdb_dict['results']
+      if not Prefs['rawsearchorder']:
+        tmdb_results = sorted(tmdb_results, key=lambda k: k['popularity'], reverse=True)
+      
+      for i, show in enumerate(tmdb_results):
         score = 90
-        score = score - abs(String.LevenshteinDistance(show['name'].lower(), media_show.lower()))
-
-        # Adjust score slightly for 'popularity' (helpful for similar or identical titles when no media.year is present)
-        #score = score - (5 * i)
+        score = score - (5 * i)
 
         if 'first_air_date' in show and show['first_air_date']:
           release_year = int(show['first_air_date'].split('-')[0])
-          score = score + 5
         else:
           release_year = None
-          score = score - 5
 
-        if media.year and int(media.year) > 1900 and release_year:
-          year_diff = abs(int(media.year) - release_year)
+        if not Prefs['rawsearchorder']:
+          score = score - abs(String.LevenshteinDistance(show['name'].lower(), media_show.lower()))
 
-          if year_diff == 0:
-            score = score + 10
+          if release_year == None:
+            score = score - 5
           else:
-            score = score - (5 * year_diff)
+            score = score + 5
+
+          if media.year and int(media.year) > 1900 and release_year:
+            year_diff = abs(int(media.year) - release_year)
+
+            if year_diff == 0:
+              score = score + 10
+            else:
+              score = score - (5 * year_diff)
 
         if score <= 0:
           continue

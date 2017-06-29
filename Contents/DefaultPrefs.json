@@ -18,6 +18,12 @@
         "default": "false"
     },
     {
+      "id": "rawsearchorder",
+      "label": "Use search result order as returned from The Movie Database",
+      "type": "bool",
+      "default": "true"
+    },
+    {
         "id": "country",
         "label": "Country (used for release date and content rating)",
         "type": "enum",
